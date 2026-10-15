@@ -1,156 +1,185 @@
-import './App.css'
-import { useEffect, useState } from 'react'
 
-const API_URL = 'http://localhost:5000/api/workouts'
+import { useState } from 'react';
+import { format } from 'timeago.js';
+import './App.css';
+import { useWorkoutsContext } from './WorkoutsContext.jsx';
 
 function App() {
-  const [workout, setWorkout] = useState([])
-  const [title, setTitle] = useState('')
-  const [load, setLoad] = useState('')
-  const [reps, setReps] = useState('')
+  const {
+    workouts,
+    isLoading,
+    error,
+    addWorkout,
+    deleteWorkout,
+    updateWorkout,
+    clearError
+  } = useWorkoutsContext();
 
-  useEffect(() => {
-    fetch(API_URL)
-      .then((response) => response.json())
-      .then((tasks) => setWorkout(tasks))
-      .catch((error) => console.log(error))
-  }, [])
+  const [title, setTitle] = useState('');
+  const [load, setLoad] = useState('');
+  const [reps, setReps] = useState('');
+  const [editId, setEditId] = useState(null);
 
-  function addWorkout(event) {
-    event.preventDefault()
-
-    fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        title: title,
-        load: load,
-        reps: reps,
-      }),
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        setWorkout([...workout, data])
-        setTitle('')
-        setLoad('')
-        setReps('')
-      })
-      .catch((error) => console.log(error))
+  function resetForm() {
+    setTitle('');
+    setLoad('');
+    setReps('');
+    setEditId(null);
   }
 
-  function deletewkt(id) {
-    fetch(`${API_URL}/${id}`, {
-      method: 'DELETE',
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error('Failed to delete workout')
+  function handleSubmit(event) {
+    event.preventDefault();
+    clearError();
+
+    const workout = {
+      title: title.trim(),
+      load: Number(load),
+      reps: Number(reps)
+    };
+
+    if (!workout.title || load === '' || reps === '') {
+      return;
+    }
+
+    if (editId) {
+      updateWorkout(editId, workout).then(data => {
+        if (data) {
+          resetForm();
         }
-        setWorkout((prevWorkout) =>
-          prevWorkout.filter((work) => work._id !== id)
-        )
-      })
-      .catch((error) => console.log(error))
+      });
+    } else {
+      addWorkout(workout).then(data => {
+        if (data) {
+          resetForm();
+        }
+      });
+    }
   }
 
-  function formatDate(date) {
-    if (!date) return ''
-    return new Date(date).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    })
+  function startEditing(workout) {
+    setEditId(workout._id);
+    setTitle(workout.title);
+    setLoad(String(workout.load));
+    setReps(String(workout.reps));
+    clearError();
+  }
+
+  function handleDelete(id) {
+    deleteWorkout(id);
   }
 
   return (
-    <div id="app" className="app">
-      <header id="app-header" className="app-header">
-        <h1 className="app-title">Workout Tracker</h1>
+    <main className="app">
+      <header className="page-header">
+        <h1>Workout Budyyy</h1>
+        <p>Track your workouts. Keep making progress.</p>
       </header>
 
-      <main id="app-main" className="app-main">
-      <section id="workout-list" className="workout-list">
-          <h2 className="section-title">Your Workouts</h2>
+      <section className="workout-form-section">
+        <h2>{editId ? 'Update workout' : 'Add a workout'}</h2>
 
-   {workout.length === 0 && (
-         <p id="empty-message" className="empty-message">
-              No workouts yet. Add your first one.
+        <form onSubmit={handleSubmit}>
+     <label htmlFor="title">Workout title</label>
+          <input
+            id="title"
+            type="text"
+            placeholder="e.g. Bench Press"
+            value={title}
+            onChange={event => setTitle(event.target.value)}
+       required
+     />
+
+     <label htmlFor="load">Load (kg)</label>
+     <input
+       id="load"
+       type="number"
+       placeholder="e.g. 60"
+       value={load}
+       onChange={event => setLoad(event.target.value)}
+            required
+    />
+
+    <label htmlFor="reps">Reps</label>
+    <input
+      id="reps"
+      type="number"
+      placeholder="e.g. 10"
+            value={reps}
+            onChange={event => setReps(event.target.value)}
+            required
+          />
+
+          {error && (
+            <p className="error-message" role="alert">
+              {error}
             </p>
           )}
 
-          {workout.map((work) => (
-            <article key={work._id} className="workout-card">
-         <div className="workout-info">
-                <h3 className="workout-title">{work.title}</h3>
-                <p className="workout-detail">
-         <span className="workout-label">Load (kg):</span> {work.load}
-                </p>
-                <p className="workout-detail">
-                  <span className="workout-label">Reps:</span> {work.reps}
-                </p>
-          <p className="workout-date">{formatDate(work.createdAt)}</p>
-              </div>
-              <button
-          type="button"
-                className="btn btn-delete"
-          onClick={() => deletewkt(work._id)}
+          <div className="form-buttons">
+            <button type="submit">
+           {editId ? 'Save changes' : 'Add workout'}
+         </button>
+
+         {editId && (
+           <button
+             type="button"
+             className="cancel-button"
+             onClick={resetForm}
               >
-               Delete
+                Cancel
               </button>
-           </article>
+            )}
+          </div>
+        </form>
+      </section>
+
+      <section className="workout-list-section">
+        <h2>Your workouts</h2>
+
+        {isLoading && <p>Loading workouts...</p>}
+
+        {!isLoading && !error && workouts.length === 0 && (
+          <p>No workouts yet. Add your first workout above.</p>
+        )}
+
+        <div className="workout-list">
+    {workouts.map(workout => (
+      <article className="workout-card" key={workout._id}>
+        <div className="workout-details">
+          <h3>{workout.title}</h3>
+          <p>Load: {workout.load} kg</p>
+                <p>Reps: {workout.reps}</p>
+
+                {workout.createdAt && (
+                  <p className="timestamp">
+                    Added {format(workout.createdAt)}
+                  </p>
+                )}
+              </div>
+
+              <div className="card-buttons">
+                <button
+                  type="button"
+       className="edit-button"
+       onClick={() => startEditing(workout)}
+     >
+       Edit
+     </button>
+
+                <button
+                  type="button"
+                  className="delete-button"
+                  onClick={() => handleDelete(workout._id)}
+                >
+                  Delete
+          </button>
+        </div>
+      </article>
           ))}
-        </section>
-
-        <aside id="workout-form-section" className="form-section">
-      <form id="workout-form" className="workout-form" onSubmit={addWorkout}>
-            <h2 className="section-title">Add a New Workout</h2>
-
-  <label htmlFor="title" className="form-label">
-    Exercise title
-           </label>
-            <input
-              id="title"
-          className="form-input"
-              type="text"
-          value={title}
-        onChange={(event) => setTitle(event.target.value)}
-              required
-            />
-
-   <label htmlFor="load" className="form-label">
-              Load (in Kgs)
-     </label>
-            <input
-              id="load"
-              className="form-input"
-       type="number"
-       value={load}
-         onChange={(event) => setLoad(event.target.value)}
-              required
-            />
-
-            <label htmlFor="reps" className="form-label">
-              Reps
-            </label>
-            <input
-              id="reps"
-              className="form-input"
-      type="number"
-      value={reps}
-              onChange={(event) => setReps(event.target.value)}
-              required
-            />
-
-        <button type="submit" id="add-btn" className="btn btn-add">
-              Add Workout
-       </button>
-    </form>
-    </aside>
-     </main>
-    </div>
-  )
+        </div>
+      </section>
+    </main>
+  );
 }
 
-export default App
+export default App;
